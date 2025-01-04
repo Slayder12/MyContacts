@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:orientation="vertical"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="8dp">
+
+    <TableRow
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        tools:ignore="UselessParent">
+
+        <LinearLayout
+            android:orientation="vertical"
+            android:layout_weight="1"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <TextView
+                android:id="@+id/nameTV"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:hint="Имя"
+                android:textColor="@color/black"
+                android:textSize="16sp"
+                android:layout_margin="4dp" />
+
+            <TextView
+                android:id="@+id/phoneNumberTV"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_margin="4dp"
+                android:hint="Номер телефона"
+                android:textColor="@color/black"
+                android:textSize="16sp" />
+
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/messageIV"
+            android:layout_width="50dp"
+            android:layout_height="match_parent"
+            android:padding="4dp"
+            android:src="@drawable/baseline_message_24" />
+
+        <ImageView
+            android:id="@+id/callIV"
+            android:layout_width="50dp"
+            android:layout_height="match_parent"
+            android:padding="4dp"
+            android:src="@drawable/baseline_phone_24" />
+
+    </TableRow>
+
+</LinearLayout>

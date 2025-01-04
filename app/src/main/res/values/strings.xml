@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">MyContacts</string>
+    <string name="massage_text">Сообщение</string>
+    <string name="number_text">Номер телефона</string>
+    <string name="input_massage_text">Введите сообщение</string>
+    <string name="send_massage_text">Отправить</string>
+    <string name="title_text">Мои контакты</string>
+</resources>
