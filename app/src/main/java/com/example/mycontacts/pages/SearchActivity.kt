@@ -12,6 +12,10 @@ import com.example.mycontacts.R
 import com.example.mycontacts.databinding.ActivitySearchBinding
 import com.example.mycontacts.models.ContactModel
 import com.example.mycontacts.utils.ContactUtils
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class SearchActivity : AppCompatActivity() {
 
@@ -37,21 +41,7 @@ class SearchActivity : AppCompatActivity() {
         binding.recyclerViewRV.layoutManager = LinearLayoutManager(this)
         customAdapter = CustomAdapter(contactModelsList)
         binding.recyclerViewRV.adapter = customAdapter
-
-        customAdapter?.setOnItemClickListener(object :
-            CustomAdapter.OnItemClickListener {
-            override fun onCallClick(item: ContactModel, position: Int) {
-                val person = (contactModelsList as ArrayList<ContactModel>)[position]
-                val number = person.phone
-                callTheNumber(number)
-            }
-            override fun onMassageClick(item: ContactModel, position: Int) {
-                val person = (contactModelsList as ArrayList<ContactModel>)[position]
-                val phoneNumber = person.phone
-                openMassageActivity(phoneNumber)
-            }
-        }
-        )
+        setOnItemClickListener()
     }
 
     private fun callTheNumber(number: String?) {
@@ -80,20 +70,46 @@ class SearchActivity : AppCompatActivity() {
 
     @SuppressLint("NotifyDataSetChanged")
     private fun fetchContacts() {
-        contactModelsList.clear()
-        contactModelsList.addAll(ContactUtils.fetchContacts(this))
-        customAdapter?.notifyDataSetChanged()
+        CoroutineScope(Dispatchers.Main).launch {
+            val contacts = withContext(Dispatchers.IO) {
+                ContactUtils.fetchContacts(this@SearchActivity)
+            }
+            contactModelsList.clear()
+            contactModelsList.addAll(contacts)
+            customAdapter?.notifyDataSetChanged()
+        }
     }
 
+    @SuppressLint("NotifyDataSetChanged")
     private fun filterContacts() {
-        val query = binding.searchNameET.text.toString()
-        val filteredContacts = if (query.isEmpty()) {
+        val name = binding.searchNameET.text.toString()
+        val filteredContacts = if (name.isEmpty()) {
             contactModelsList
         } else {
-            contactModelsList.filter { it.name?.contains(query, ignoreCase = true) == true }
+            contactModelsList.filter { it.name?.contains(name, ignoreCase = true) == true }
         }
         customAdapter = CustomAdapter(filteredContacts.toMutableList())
         binding.recyclerViewRV.adapter = customAdapter
+        customAdapter?.notifyDataSetChanged()
+        setOnItemClickListener()
+    }
+
+    private fun setOnItemClickListener() {
+        customAdapter?.setOnItemClickListener(object :
+            CustomAdapter.OnItemClickListener {
+            override fun onCallClick(item: ContactModel, position: Int) {
+                val person = (contactModelsList as ArrayList<ContactModel>)[position]
+                val number = person.phone
+                callTheNumber(number)
+            }
+
+            override fun onMassageClick(item: ContactModel, position: Int) {
+                val person = (contactModelsList as ArrayList<ContactModel>)[position]
+                val phoneNumber = person.phone
+                openMassageActivity(phoneNumber)
+            }
+        }
+        )
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {

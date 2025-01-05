@@ -23,6 +23,10 @@ import com.example.mycontacts.pages.MassageActivity
 import com.example.mycontacts.pages.SearchActivity
 import com.example.mycontacts.utils.ContactUtils
 import com.example.mycontacts.utils.PermissionManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : AppCompatActivity() {
 
@@ -40,7 +44,6 @@ class MainActivity : AppCompatActivity() {
 
         setupRecyclerView()
         setupButtons()
-
         checkAndFetchContacts()
     }
 
@@ -61,7 +64,6 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             }
-
             override fun onMassageClick(item: ContactModel, position: Int) {
                 val person = (contactModelsList as ArrayList<ContactModel>)[position]
                 val phoneNumber = person.phone
@@ -75,7 +77,6 @@ class MainActivity : AppCompatActivity() {
             }
         })
     }
-
 
     private fun callTheNumber(number: String?) {
         val intent = Intent(Intent.ACTION_CALL)
@@ -113,53 +114,65 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("NotifyDataSetChanged")
     private fun fetchContacts() {
-        contactModelsList.clear()
-        contactModelsList.addAll(ContactUtils.fetchContacts(this))
-        customAdapter?.notifyDataSetChanged()
+        CoroutineScope(Dispatchers.Main).launch {
+            val contacts = withContext(Dispatchers.IO) {
+                ContactUtils.fetchContacts(this@MainActivity)
+            }
+            contactModelsList.clear()
+            contactModelsList.addAll(contacts)
+            customAdapter?.notifyDataSetChanged()
+        }
     }
 
     private fun addNewContact() {
         val newContactName = binding.newContactNameET.text.toString()
         val newContactPhone = binding.newContactPhoneET.text.toString()
         if (!ContactModel.isValidate(this, newContactName, newContactPhone)) return
-
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.WRITE_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
             permissionManager.requestPermission(Manifest.permission.WRITE_CONTACTS) { isGranted ->
                 if (isGranted) addContactToPhonebook(newContactName, newContactPhone)
             }
         } else {
             addContactToPhonebook(newContactName, newContactPhone)
-            binding.newContactNameET.text.clear()
-            binding.newContactPhoneET.text.clear()
         }
+        binding.newContactNameET.text.clear()
+        binding.newContactPhoneET.text.clear()
     }
-
     private fun addContactToPhonebook(name: String, phone: String) {
-        val listCPO = ArrayList<ContentProviderOperation>().apply {
-            add(ContentProviderOperation.newInsert(RawContacts.CONTENT_URI)
-                .withValue(RawContacts.ACCOUNT_TYPE, null)
-                .withValue(RawContacts.ACCOUNT_NAME, null)
-                .build())
-            add(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
-                .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
-                .withValue(ContactsContract.Data.MIMETYPE, StructuredName.CONTENT_ITEM_TYPE)
-                .withValue(StructuredName.DISPLAY_NAME, name)
-                .build())
-            add(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
-                .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
-                .withValue(ContactsContract.Data.MIMETYPE, Phone.CONTENT_ITEM_TYPE)
-                .withValue(Phone.NUMBER, phone)
-                .withValue(Phone.TYPE, Phone.TYPE_MOBILE)
-                .build())
-        }
-
-        try {
-            contentResolver.applyBatch(ContactsContract.AUTHORITY, listCPO)
-            Toast.makeText(this, "$name добавлен", Toast.LENGTH_SHORT).show()
-            fetchContacts()
-        } catch (e: Exception) {
-            Log.e("Exception", e.message ?: "Error adding contact")
-            Toast.makeText(this, "Ошибка", Toast.LENGTH_SHORT).show()
+        CoroutineScope(Dispatchers.Main).launch {
+            val result = withContext(Dispatchers.IO) {
+                try {
+                    val listCPO = ArrayList<ContentProviderOperation>().apply {
+                        add(ContentProviderOperation.newInsert(RawContacts.CONTENT_URI)
+                            .withValue(RawContacts.ACCOUNT_TYPE, null)
+                            .withValue(RawContacts.ACCOUNT_NAME, null)
+                            .build())
+                        add(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+                            .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
+                            .withValue(ContactsContract.Data.MIMETYPE, StructuredName.CONTENT_ITEM_TYPE)
+                            .withValue(StructuredName.DISPLAY_NAME, name)
+                            .build())
+                        add(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+                            .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
+                            .withValue(ContactsContract.Data.MIMETYPE, Phone.CONTENT_ITEM_TYPE)
+                            .withValue(Phone.NUMBER, phone)
+                            .withValue(Phone.TYPE, Phone.TYPE_MOBILE)
+                            .build())
+                    }
+                    contentResolver.applyBatch(ContactsContract.AUTHORITY, listCPO)
+                    true
+                } catch (e: Exception) {
+                    Log.e("Exception", e.message ?: "Error adding contact")
+                    false
+                }
+            }
+            if (result) {
+                Toast.makeText(this@MainActivity, "$name добавлен", Toast.LENGTH_SHORT).show()
+                fetchContacts()
+            } else {
+                Toast.makeText(this@MainActivity, "Ошибка", Toast.LENGTH_SHORT).show()
+            }
         }
     }
+
 }
