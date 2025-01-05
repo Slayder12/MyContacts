@@ -7,94 +7,75 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.mycontacts.databinding.ActivityMainBinding
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.ContentProviderOperation
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.ContactsContract
+import android.provider.ContactsContract.CommonDataKinds.Phone
+import android.provider.ContactsContract.CommonDataKinds.StructuredName
+import android.provider.ContactsContract.RawContacts
+import android.util.Log
 import android.widget.Toast
-import androidx.activity.result.contract.ActivityResultContracts
-
+import com.example.mycontacts.adapter.CustomAdapter
+import com.example.mycontacts.models.ContactModel
+import com.example.mycontacts.pages.MassageActivity
+import com.example.mycontacts.pages.SearchActivity
+import com.example.mycontacts.utils.ContactUtils
+import com.example.mycontacts.utils.PermissionManager
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private var customAdapter: CustomAdapter? = null
-    private var contactModelsList: MutableList<ContactModel>? = null
+    private val contactModelsList = mutableListOf<ContactModel>()
+    private lateinit var permissionManager: PermissionManager
 
-    @SuppressLint("NotifyDataSetChanged")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        binding.recyclerViewRV.layoutManager = LinearLayoutManager(this)
+        permissionManager = PermissionManager(this)
 
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) !=
-            PackageManager.PERMISSION_GRANTED
-        ) {
-            permissionContact.launch(Manifest.permission.READ_CONTACTS)
-            customAdapter?.notifyDataSetChanged()
-        } else {
-            getContact()
-        }
+        setupRecyclerView()
+        setupButtons()
 
+        checkAndFetchContacts()
     }
-    @SuppressLint("Recycle", "Range")
-    private fun getContact(){
-        contactModelsList = ArrayList()
-        val phones = contentResolver.query(
-            ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-            null,
-            null,
-            null,
-            ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " ASC"
-        )
-        while (phones!!.moveToNext()) {
-            val name =
-                phones.getString(phones.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME))
-            val phoneNumber =
-                phones.getString(phones.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER))
 
-            val contactModel = ContactModel(name, phoneNumber)
-            contactModelsList?.add(contactModel)
-        }
-        phones.close()
-        customAdapter = CustomAdapter(contactModelsList!!)
+    private fun setupRecyclerView() {
+        binding.recyclerViewRV.layoutManager = LinearLayoutManager(this)
+        customAdapter = CustomAdapter(contactModelsList)
         binding.recyclerViewRV.adapter = customAdapter
-        binding.recyclerViewRV.setHasFixedSize(true)
 
-        customAdapter?.setOnItemClickListener(object :
-            CustomAdapter.OnItemClickListener{
+        customAdapter?.setOnItemClickListener(object : CustomAdapter.OnItemClickListener {
             override fun onCallClick(item: ContactModel, position: Int) {
                 val person = (contactModelsList as ArrayList<ContactModel>)[position]
                 val number = person.phone
-                if (ActivityCompat.checkSelfPermission(this@MainActivity, Manifest.permission.CALL_PHONE) !=
-                    PackageManager.PERMISSION_GRANTED
-                ) {
-                    permissionOfCall.launch(Manifest.permission.CALL_PHONE)
-                } else{
-                    callTheNumber(number)
+                permissionManager.requestPermission(Manifest.permission.CALL_PHONE) { isGranted ->
+                    if (isGranted) {
+                        callTheNumber(number)
+                    } else {
+                        Toast.makeText(this@MainActivity, "Доступ к звонкам отклонен", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
 
             override fun onMassageClick(item: ContactModel, position: Int) {
                 val person = (contactModelsList as ArrayList<ContactModel>)[position]
                 val phoneNumber = person.phone
-                if (ActivityCompat.checkSelfPermission(this@MainActivity, Manifest.permission.SEND_SMS) !=
-                    PackageManager.PERMISSION_GRANTED
-                ) {
-                    permissionOfMassage.launch(Manifest.permission.SEND_SMS)
-                } else {
-                    val intent = Intent(this@MainActivity, MassageActivity::class.java)
-                    intent.putExtra("phoneNumber", phoneNumber)
-                    startActivity(intent)
+                permissionManager.requestPermission(Manifest.permission.SEND_SMS) { isGranted ->
+                    if (isGranted) {
+                        openMassageActivity(phoneNumber)
+                    } else {
+                        Toast.makeText(this@MainActivity, "Доступ к сообщениям отклонен", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
-        }
-        )
+        })
     }
+
 
     private fun callTheNumber(number: String?) {
         val intent = Intent(Intent.ACTION_CALL)
@@ -102,52 +83,83 @@ class MainActivity : AppCompatActivity() {
         startActivity(intent)
     }
 
-    private val permissionContact = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted){
-            Toast.makeText(this@MainActivity,
-                "Получен доступ к контактам",
-                Toast.LENGTH_SHORT)
-                .show()
-            getContact()
-        } else {
-            Toast.makeText(this@MainActivity,
-                "В разрешении отказано",
-                Toast.LENGTH_SHORT)
-                .show()
+    private fun openMassageActivity(phoneNumber: String?) {
+        val intent = Intent(this, MassageActivity::class.java).apply {
+            putExtra("phoneNumber", phoneNumber)
+        }
+        startActivity(intent)
+    }
+
+    private fun setupButtons() {
+        binding.exitIB.setOnClickListener { finishAffinity() }
+        binding.searchIB.setOnClickListener {
+            val intent = Intent(this@MainActivity, SearchActivity::class.java)
+            startActivity(intent)
+        }
+        binding.addBTN.setOnClickListener {
+            addNewContact()
         }
     }
 
-    private  val permissionOfCall = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            Toast.makeText(this@MainActivity,
-                "Получен доступ к звонкам",
-                Toast.LENGTH_SHORT)
-                .show()
+    private fun checkAndFetchContacts() {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+            permissionManager.requestPermission(Manifest.permission.READ_CONTACTS) { isGranted ->
+                if (isGranted) fetchContacts()
+            }
         } else {
-            Toast.makeText(this@MainActivity,
-                "В разрешении отказано",
-                Toast.LENGTH_SHORT)
-                .show()
+            fetchContacts()
         }
     }
 
-    private  val permissionOfMassage = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            Toast.makeText(this@MainActivity,
-                "Получен доступ к сообщениям",
-                Toast.LENGTH_SHORT)
-                .show()
+    @SuppressLint("NotifyDataSetChanged")
+    private fun fetchContacts() {
+        contactModelsList.clear()
+        contactModelsList.addAll(ContactUtils.fetchContacts(this))
+        customAdapter?.notifyDataSetChanged()
+    }
+
+    private fun addNewContact() {
+        val newContactName = binding.newContactNameET.text.toString()
+        val newContactPhone = binding.newContactPhoneET.text.toString()
+        if (!ContactModel.isValidate(this, newContactName, newContactPhone)) return
+
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.WRITE_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+            permissionManager.requestPermission(Manifest.permission.WRITE_CONTACTS) { isGranted ->
+                if (isGranted) addContactToPhonebook(newContactName, newContactPhone)
+            }
         } else {
-            Toast.makeText(this@MainActivity,
-                "В разрешении отказано",
-                Toast.LENGTH_SHORT)
-                .show()
+            addContactToPhonebook(newContactName, newContactPhone)
+            binding.newContactNameET.text.clear()
+            binding.newContactPhoneET.text.clear()
+        }
+    }
+
+    private fun addContactToPhonebook(name: String, phone: String) {
+        val listCPO = ArrayList<ContentProviderOperation>().apply {
+            add(ContentProviderOperation.newInsert(RawContacts.CONTENT_URI)
+                .withValue(RawContacts.ACCOUNT_TYPE, null)
+                .withValue(RawContacts.ACCOUNT_NAME, null)
+                .build())
+            add(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+                .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
+                .withValue(ContactsContract.Data.MIMETYPE, StructuredName.CONTENT_ITEM_TYPE)
+                .withValue(StructuredName.DISPLAY_NAME, name)
+                .build())
+            add(ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+                .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
+                .withValue(ContactsContract.Data.MIMETYPE, Phone.CONTENT_ITEM_TYPE)
+                .withValue(Phone.NUMBER, phone)
+                .withValue(Phone.TYPE, Phone.TYPE_MOBILE)
+                .build())
+        }
+
+        try {
+            contentResolver.applyBatch(ContactsContract.AUTHORITY, listCPO)
+            Toast.makeText(this, "$name добавлен", Toast.LENGTH_SHORT).show()
+            fetchContacts()
+        } catch (e: Exception) {
+            Log.e("Exception", e.message ?: "Error adding contact")
+            Toast.makeText(this, "Ошибка", Toast.LENGTH_SHORT).show()
         }
     }
 }

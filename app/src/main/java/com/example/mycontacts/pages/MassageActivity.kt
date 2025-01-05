@@ -1,4 +1,4 @@
-package com.example.mycontacts
+package com.example.mycontacts.pages
 
 import android.annotation.SuppressLint
 import android.os.Build
@@ -7,6 +7,7 @@ import android.telephony.SmsManager
 import android.view.MenuItem
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import com.example.mycontacts.R
 import com.example.mycontacts.databinding.ActivityMassageBinding
 
 class MassageActivity : AppCompatActivity() {
